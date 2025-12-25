@@ -237,17 +237,94 @@ void explainPriorityQueue(){
     //push , pop- O(logn) top - O(1)
 }
 
-void explainSet(){  
+void explainSet() {
+    // -------------------------------
+    // Basic properties of set
+    // - sorted
+    // - unique
+    // - O(log n) operations
+    // -------------------------------
+
     set<int> st;
-    //sorted and unique 
+
+    // insert / emplace
     st.insert(1);
     st.emplace(2);
-    st.insert(2);
+    st.insert(2);   // duplicate, ignored
     st.insert(5);
-    
-    for(auto stIt : st){
-        cout  << stIt << " ";
+    st.insert(920);
+
+    // traversal (always sorted)
+    cout << "Set elements: ";
+    for (int x : st) {
+        cout << x << " ";
+    }
+    cout << endl;
+
+    // -------------------------------
+    // find()
+    // -------------------------------
+    auto it = st.find(2);
+    if (it != st.end()) {
+        cout << "Found 2: " << *it << endl;
     }
 
+    // -------------------------------
+    // element not found
+    // -------------------------------
+    auto it2 = st.find(7);
+    if (it2 == st.end()) {
+        cout << "7 not found" << endl;
+
+        // safely move to previous element
+        if (!st.empty()) {
+            auto prevIt = st.end();
+            --prevIt;
+            cout << "Largest element < 7: " << *prevIt << endl;
+        }
+    }
+
+    // -------------------------------
+    // erase
+    // -------------------------------
+    st.erase(5);   // erase by value
+
+    // -------------------------------
+    // count
+    // -------------------------------
+    cout << "Count of 1: " << st.count(1) << endl; // 0 or 1
+
+    // erase by iterator (safe example)
+    auto itErase = st.find(2);
+    if (itErase != st.end()) {
+        st.erase(itErase);
+    }
+
+    cout << "After erase: ";
+    for (int x : st) {
+        cout << x << " ";
+    }
     cout << endl;
+
+    // -------------------------------
+    // lower_bound & upper_bound
+    // -------------------------------
+    set<int> s;
+    s.emplace(1);
+    s.emplace(2);
+    s.emplace(4);
+    s.emplace(9);
+    s.emplace(27);
+
+    // lower_bound: first >= x
+    auto lb = s.lower_bound(5);
+    if (lb != s.end()) {
+        cout << "lower_bound(5): " << *lb << endl;
+    }
+
+    // upper_bound: first > x
+    auto ub = s.upper_bound(9);
+    if (ub != s.end()) {
+        cout << "upper_bound(9): " << *ub << endl;
+    }
 }

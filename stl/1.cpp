@@ -29,7 +29,7 @@ void vectors(){
     vecPair.emplace_back(1,2);
     vecPair.push_back({5,6});
     
-    //conatiner where the elements are sort of defined
+    
     std::vector<int> v3(3, 100);
     std::cout << v3[1] << " " << v3[0] << " "  << v3[2] << "\n";
 

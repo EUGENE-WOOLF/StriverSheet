@@ -23,7 +23,7 @@ void vectors(){
     std::vector<int> v;
     v.push_back(1);
     v.emplace_back(2);
-    std::cout << v[1] << "\n";
+
     
     std::vector<std::pair<int, int>> vecPair;
     vecPair.emplace_back(1,2);

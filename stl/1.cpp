@@ -25,6 +25,8 @@ void explainList();
 void explainDeque();
 void explainStack();
 void explainQueue();
+void explainPriorityQueue();
+void explainSet();
 
 int main() {
 
@@ -38,7 +40,9 @@ int main() {
     // explainList();
     // explainDeque();
     // explainStack();
-    explainQueue();
+    // explainQueue();
+    // explainPriorityQueue();
+    explainSet();
 
     return 0;
 }
@@ -209,3 +213,41 @@ void explainQueue() {
 }
 
 
+void explainPriorityQueue(){
+    //this is known as the max head as the greatest value number stays on top 
+    priority_queue<int> pq;
+    pq.push(1);
+    pq.push(5);
+    pq.push(2);
+    pq.push(7);
+
+    cout << pq.top();
+    pq.pop();
+    cout << pq.top();
+
+
+    //min heap
+    priority_queue<int, vector<int>, greater<int>> pq2;
+    pq2.push(5);
+    pq2.push(1);
+    pq2.push(2);
+
+    cout << pq2.top();
+    
+    //push , pop- O(logn) top - O(1)
+}
+
+void explainSet(){  
+    set<int> st;
+    //sorted and unique 
+    st.insert(1);
+    st.emplace(2);
+    st.insert(2);
+    st.insert(5);
+    
+    for(auto stIt : st){
+        cout  << stIt << " ";
+    }
+
+    cout << endl;
+}

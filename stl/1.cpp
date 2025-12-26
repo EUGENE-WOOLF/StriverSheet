@@ -27,6 +27,8 @@ void explainStack();
 void explainQueue();
 void explainPriorityQueue();
 void explainSet();
+void explainMultiSet();
+void explainMap();
 
 int main() {
 
@@ -34,6 +36,7 @@ int main() {
     pair<int, int> p = {1, 3};
     pair<int, pair<int, int>> nestedPair = {1, {2, 3}};
     pair<int, int> arr[] = {{1, 2}, {2, 3}};
+    
 
     // Uncomment to test
     // explainVector();
@@ -42,7 +45,9 @@ int main() {
     // explainStack();
     // explainQueue();
     // explainPriorityQueue();
-    explainSet();
+    // explainSet();
+    // explainMultiSet();
+    explainMap();
 
     return 0;
 }
@@ -328,3 +333,289 @@ void explainSet() {
         cout << "upper_bound(9): " << *ub << endl;
     }
 }
+
+
+/*
+====================================================
+                MULTISET NOTES
+====================================================
+
+- Ordered associative container
+- Implemented using Red-Black Tree (balanced BST)
+- Stores elements in sorted order
+- Allows DUPLICATES
+- Iterators are BIDIRECTIONAL (++, -- only)
+- No random access (NO it + 1)
+
+Time Complexity:
+- insert      -> O(log n)
+- find        -> O(log n)
+- erase       -> O(log n)
+- count       -> O(log n + occurrences)
+
+IMPORTANT:
+- erase(value)  -> removes ALL occurrences
+- erase(it)     -> removes ONE element
+*/
+
+void explainMultiSet() {
+    multiset<int> ms;
+
+    ms.insert(1);
+    ms.insert(1);
+    ms.insert(3);
+    ms.insert(4);
+
+    // Count occurrences
+    cout << "Count of 1: " << ms.count(1) << endl;
+
+    // Find ONE occurrence
+    auto it = ms.find(1);
+
+    // Erase only ONE occurrence (correct)
+    if (it != ms.end()) {
+        ms.erase(it);
+    }
+
+    // Traversal (always sorted)
+    cout << "Multiset elements: ";
+    for (auto x : ms) {
+        cout << x << " ";
+    }
+    cout << endl;
+
+    // Range erase (erase ONE element safely)
+    auto it2 = ms.find(1);
+    if (it2 != ms.end()) {
+        //so if it doesn't exist then it has to do that 
+        ms.erase(it2, next(it2));
+    }
+}
+
+/*
+====================================================
+              UNORDERED SET NOTES
+====================================================
+
+- Unordered associative container
+- Implemented using HASH TABLE
+- Stores UNIQUE elements only
+- Order is NOT guaranteed
+- Iterators are FORWARD only
+
+Time Complexity (Average Case):
+- insert      -> O(1)
+- find        -> O(1)
+- erase       -> O(1)
+
+Worst Case (hash collision):
+- O(n)
+
+IMPORTANT:
+- Faster than set/multiset
+- No ordering
+- No duplicates
+*/
+
+void explainUnorderedSet() {
+    unordered_set<int> us;
+
+    us.insert(1);
+    us.insert(2);
+    us.insert(3);
+    us.insert(3); // duplicate ignored
+
+    // Find
+    if (us.find(2) != us.end()) {
+        cout << "2 is present" << endl;
+    }
+
+    // Erase
+    us.erase(2);
+
+    // Traversal (random order)
+    cout << "Unordered set elements: ";
+    for (auto x : us) {
+        cout << x << " ";
+    }
+    cout << endl;
+}
+
+/*
+====================================================
+            QUICK COMPARISON
+====================================================
+
+multiset:
+- ordered
+- duplicates allowed
+- O(log n)
+- tree based
+
+unordered_set:
+- unordered
+- unique only
+- O(1) average
+- hash based
+*/
+
+
+
+
+/*
+====================================================
+                    MAP
+====================================================
+
+- Stores UNIQUE keys in SORTED order
+- Implemented using Red-Black Tree (balanced BST)
+- Keys are ordered using < operator
+- Duplicate keys are NOT allowed
+
+Time Complexity:
+- insert       -> O(log n)
+- find         -> O(log n)
+- erase        -> O(log n)
+- lower_bound  -> O(log n)
+- upper_bound  -> O(log n)
+
+Iterator points to:
+pair<const Key, Value>
+*/
+
+void explainMap() {
+
+    map<int, int> map1;                       // key -> value
+    map<pair<int, int>, int> map2;            // pair key
+    map<int, pair<int, int>> map3;            // value is a pair
+
+    map2[{1,2}] = 10;
+
+    map1[1] = 2;              // inserts if key not present
+    map1.emplace(2, 4);       // preferred (no extra copy)
+    map1.insert({3, 4});      // insert pair
+
+    cout << map1[1] << endl;
+
+    // find()
+    auto it = map1.find(3);
+    if (it != map1.end()) {
+        cout << it->second << endl;
+    }
+
+    // bounds (only valid for ordered containers)
+    auto it1 = map1.lower_bound(2); // first key >= 2
+    auto it2 = map1.upper_bound(2); // first key > 2
+
+    // traversal (sorted order)
+    // for (auto it : map1) {
+    //     cout << it.first << " " << it.second << endl;
+    // }
+}
+
+/*
+====================================================
+                UNORDERED_MAP
+====================================================
+
+- Stores UNIQUE keys
+- Order is NOT guaranteed
+- Implemented using HASH TABLE
+- Faster than map in average case
+
+Time Complexity (average):
+- insert  -> O(1)
+- find    -> O(1)
+- erase   -> O(1)
+
+Worst case:
+- O(n) (hash collisions)
+
+IMPORTANT:
+- No lower_bound / upper_bound
+- No ordering
+*/
+
+void explainUnorderedMap() {
+
+    unordered_map<int, int> ump;
+
+    ump[1] = 10;
+    ump[2] = 20;
+    ump.emplace(3, 30);
+
+    if (ump.find(2) != ump.end()) {
+        cout << ump[2] << endl;
+    }
+
+    // traversal (random order)
+    // for (auto it : ump) {
+    //     cout << it.first << " " << it.second << endl;
+    // }
+}
+
+/*
+====================================================
+                    MULTIMAP
+====================================================
+
+- Allows DUPLICATE keys
+- Keys are SORTED
+- Implemented using Red-Black Tree
+
+Time Complexity:
+- insert  -> O(log n)
+- find    -> O(log n)
+- erase   -> O(log n)
+
+IMPORTANT:
+- operator[] is NOT available
+- find() returns ONE occurrence
+- use equal_range() for all duplicates
+*/
+
+void explainMultiMap() {
+
+    multimap<int, int> mm;
+
+    mm.insert({1, 10});
+    mm.insert({1, 20});
+    mm.insert({2, 30});
+
+    // find() -> one occurrence
+    auto it = mm.find(1);
+    if (it != mm.end()) {
+        cout << it->first << " " << it->second << endl;
+    }
+
+    // get all values of a key
+    auto range = mm.equal_range(1);
+    for (auto it = range.first; it != range.second; it++) {
+        cout << it->second << " ";
+    }
+    cout << endl;
+}
+
+/*
+====================================================
+                QUICK SUMMARY
+====================================================
+
+map:
+- unique keys
+- sorted
+- O(log n)
+
+unordered_map:
+- unique keys
+- not sorted
+- O(1) average
+
+multimap:
+- duplicate keys allowed
+- sorted
+- O(log n)
+*/
+
+
+

@@ -12,6 +12,7 @@ bool isPrime(int n) {
     for(auto it : v){
         std::cout << it  << " ";
     }
+    
     return (v.size() == 2 ? true : false);
         
 }

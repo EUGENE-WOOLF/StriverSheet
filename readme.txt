@@ -1,276 +1,155 @@
-# Eligibility Matrix System - End-to-End Report
+# Eligibility Matrix System - PhD Portal Analysis & Department-Only Proposal
 
 ## Executive Summary
 
-This document provides a comprehensive end-to-end analysis of how companies select departments and programs (e.g., BT CSE) for job openings, how this information is stored in the database, and how student eligibility is verified. The system uses an **Eligibility Matrix** - a binary string representation that maps program-department combinations to specific positions in a string.
+This document provides a comprehensive analysis of the **PhD Portal** eligibility system, compares it with the original 130-bit program×department matrix system, and outlines the changes required to implement **department-only eligibility** (where selecting a department makes all students in that department eligible, regardless of their specific research keyword).
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Eligibility Matrix Structure](#eligibility-matrix-structure)
-3. [Program-Department Mapping](#program-department-mapping)
-4. [Frontend: Company Selection Process](#frontend-company-selection-process)
-5. [Backend: API Endpoints](#backend-api-endpoints)
-6. [Database Storage](#database-storage)
-7. [Student Eligibility Verification](#student-eligibility-verification)
-8. [Complete Flow Diagram](#complete-flow-diagram)
-9. [Code References](#code-references)
+1. [Current PhD Portal System Overview](#current-phd-portal-system-overview)
+2. [Key Differences from Original 130-Bit System](#key-differences-from-original-130-bit-system)
+3. [End-to-End Flow in PhD Portal](#end-to-end-flow-in-phd-portal)
+4. [Department-Only Eligibility Proposal](#department-only-eligibility-proposal)
+5. [Required Code Changes](#required-code-changes)
+6. [Who Sees What After Changes](#who-sees-what-after-changes)
+7. [Code References](#code-references)
 
 ---
 
-## Overview
+## Current PhD Portal System Overview
 
-The Eligibility Matrix is a **130-character binary string** where each position represents a specific program-department combination. A `'1'` indicates eligibility, and `'0'` indicates non-eligibility.
+### Eligibility Matrix Structure
 
-**Key Components:**
-- **Frontend**: Interactive matrix UI for companies to select eligible programs/departments
-- **Backend**: API endpoints to save/update eligibility matrix
-- **Database**: Stores eligibility as a string in the `proforma` table
-- **Verification**: Students are checked against this matrix when viewing/applying to openings
+**String Format:**
+- **Length**: 223 characters (positions 0-222)
+- **Index 0**: Always set to `'0'` (reserved/unused) via `BeforeUpdate` hook
+- **Positions 1-222**: Map to specific **Department-Keyword** combinations
+- **Default Value**: `"0000...0"` (130 zeros) - **BUG**: Should be 223 zeros!
 
----
+### Mapping Structure
 
-## Eligibility Matrix Structure
+The PhD portal uses a **Department → Research Keyword** mapping:
 
-### String Format
-- **Length**: 130 characters (positions 0-129)
-- **Index 0**: Always set to `'0'` (reserved/unused)
-- **Positions 1-139**: Map to specific program-department combinations
-- **Default Value**: `"0000...0"` (130 zeros) - no eligibility by default
+- **20 Departments** (e.g., `CSE`, `EE`, `ME`, `MSE`, `CHE`, `BSBE`, etc.)
+- **222 Research Keywords** total across all departments
+- Each keyword maps to a unique position (1-222) in the eligibility string
 
-### Example
+**Example Mapping:**
 ```
-Position:  0  1  2  3  4  5  6  7  8  9  ...
-Value:     0  1  1  0  0  1  0  0  0  0  ...
-Meaning:   -  BT BT BT BT BT BT BT BT BT ...
-           -  AE BSBE CE CHE CSE EE MSE ME ...
+Position 99:  "CSE-Theoretical-computer-science"
+Position 100: "CSE-Machine-learning"
+Position 101: "CSE-Computer-systems"
+...
+Position 5:   "MSE-Opto-electronic-devices"
+Position 17:  "ME-Combustion"
 ```
 
----
-
-## Program-Department Mapping
-
-### Programs Supported
-1. **BT** - Bachelor of Technology
-2. **BS** - Bachelor of Science
-3. **BTM** - Bachelor of Technology (Minor)
-4. **BSM** - Bachelor of Science (Minor)
-5. **DoubleMajor** - Double Major programs
-6. **DualA** - Dual Degree Type A
-7. **DualB** - Dual Degree Type B
-8. **DualC** - Dual Degree Type C
-9. **MT** - Master of Technology
-10. **MSR** - Master of Science by Research
-11. **MSc** - Master of Science
-12. **MDes** - Master of Design
-13. **MBA** - Master of Business Administration
-14. **PhD** - Doctor of Philosophy
-
-### Departments Supported
-27 departments including:
-- **AE** - Aerospace Engineering
-- **BSBE** - Biological Sciences and Bioengineering
-- **CE** - Civil Engineering
-- **CHE** - Chemical Engineering
-- **CSE** - Computer Science and Engineering
-- **EE** - Electrical Engineering
-- **MSE** - Material Science and Engineering
-- **ME** - Mechanical Engineering
-- **CHM** - Chemistry
-- **ECO** - Economics
-- **MTH** - Mathematics and Scientific Computing
-- **SDS** - Statistics and Data Science
-- **PHY** - Physics
-- And 14 more...
-
-### Mapping Table (Key Examples)
-
-| Position | Program-Department | Example |
-|----------|-------------------|---------|
-| 1 | BT-AE | Bachelor of Technology - Aerospace Engineering |
-| 5 | BT-CSE | Bachelor of Technology - Computer Science and Engineering |
-| 18 | MT-CSE | Master of Technology - Computer Science and Engineering |
-| 32 | DoubleMajor-CSE | Double Major - Computer Science and Engineering |
-| 42 | DualA-CSE | Dual Degree Type A - Computer Science and Engineering |
-
-**Full mapping**: See `ras-frontend/components/Utils/matrixUtils.ts` - `func` object (lines 105-538)
+**Key Insight**: In the PhD portal, `ProgramDepartmentID` represents a **keyword ID** (1-222), not a program×department combo. The "department" is extracted from the keyword ID using the reverse mapping.
 
 ---
 
-## Frontend: Company Selection Process
+## Key Differences from Original 130-Bit System
 
-### Step 3: Eligibility Matrix Selection
+| Aspect | Original 130-Bit System | PhD Portal System |
+|--------|-------------------------|-------------------|
+| **String Length** | 130 characters | 223 characters |
+| **Position Meaning** | Program×Department combo (e.g., BT-CSE) | Department×Keyword combo (e.g., CSE-Machine-learning) |
+| **Query Method** | SQL `SUBSTRING(eligibility FROM id+1 FOR 1) = '1'` | SQL `LIKE` with wildcard patterns `'____1____%'` |
+| **Default Initialization** | 130 zeros | **130 zeros (BUG - should be 223)** |
+| **Student ID Meaning** | Program×Department ID | Keyword ID (research specialization) |
+| **Company Selection** | Program×Department matrix | Department×Keyword matrix |
 
-**File**: `ras-frontend/pages/company/rc/[rcid]/proforma/[proformaid]/step3.tsx`
+### Critical Bug Identified
 
-#### UI Components
+**File**: `Phd-PAS-backend/application/model.hooks.go` (line 58)
 
-1. **Matrix Table**
-   - Rows: Departments (27 branches)
-   - Columns: Programs (14 program types)
-   - Checkboxes: Allow selection of specific combinations
-
-2. **Quick Selection Buttons**
-   - **Select All**: Sets all positions to `'1'`
-   - **JEE Advanced**: Selects BT, BS, DoubleMajor, DualA, DualB, DualC, BTM, BSM
-   - **GATE**: Selects MT, MSR, MDes
-   - **JAM**: Selects MSc
-   - **CAT**: Selects MBA
-   - **CEED**: Selects MDes
-
-3. **Program-Wise Selection**
-   - Buttons to select all departments for a program type
-   - Example: "Bachelor of Technology / Bachelor of Science / Double Major" button
-
-4. **Branch-Wise Selection**
-   - Buttons to select all programs for a department
-   - Example: "Computer Science and Engineering (CSE)" button
-
-#### State Management
-
-```typescript
-const [str, setStr] = useState(new Array(133 + 1).join("0")); // Initialize with zeros
-```
-
-#### Key Functions
-
-1. **`handleCheck(branch, program)`**
-   - Toggles eligibility for specific branch-program combinations
-   - Uses `func` mapping to find correct string index
-   - Updates string: `newStr = newStr.substring(0, idx) + "1" + newStr.substring(idx + 1)`
-
-2. **`handleProgramWise(programName[])`**
-   - Selects all branches for given program types
-   - Iterates through all branches and sets corresponding indices
-
-3. **`handleBranchWise(branchName)`**
-   - Selects all programs for a given branch
-   - Iterates through all program types
-
-4. **`handleNext()`**
-   - Sends eligibility string to backend via PUT request
-   - API: `PUT /api/company/application/rc/:rid/proforma`
-   - Payload: `{ eligibility: str, ID: proformaId }`
-
-#### Matrix Display Component
-
-**File**: `ras-frontend/components/Utils/MatrixExpanded.tsx`
-
-- Displays eligibility matrix as a table
-- Shows checkmarks (✓) for eligible combinations
-- Shows crosses (✗) for non-eligible combinations
-- Shows dashes (-) for invalid combinations
-
----
-
-## Backend: API Endpoints
-
-### Company Endpoints
-
-#### 1. Create Proforma
-**Endpoint**: `POST /api/company/application/rc/:rid/proforma`
-
-**File**: `ras-backend/application/company.proforma.go` (lines 31-67)
-
-**Process**:
-1. Company creates new proforma
-2. Default eligibility: `"0000...0"` (130 zeros) - set by `BeforeCreate` hook
-3. Returns proforma ID
-
-#### 2. Update Proforma (Eligibility)
-**Endpoint**: `PUT /api/company/application/rc/:rid/proforma`
-
-**File**: `ras-backend/application/company.proforma.go` (lines 69-97)
-
-**Request Body**:
-```json
-{
-  "ID": 123,
-  "eligibility": "0101010101...",
-  // ... other fields
-}
-```
-
-**Process**:
-1. Validates company authorization
-2. Calls `updateProformaForCompany()`
-3. Before update hook sets index 0 to `'0'` (always)
-4. Updates database
-
-**File**: `ras-backend/application/db.proforma.go` (lines 258-261)
-
-#### 3. Get Proforma
-**Endpoint**: `GET /api/company/application/rc/:rid/proforma/:pid`
-
-**Returns**: Proforma object including eligibility string
-
----
-
-### Student Endpoints
-
-#### 1. Get Eligible Openings
-**Endpoint**: `GET /api/student/application/rc/:rid/opening`
-
-**File**: `ras-backend/application/student.proforma.go` (lines 29-54)
-
-**Process**:
-1. Gets student's recruitment cycle ID
-2. Fetches student record (includes `ProgramDepartmentID` and `SecondaryProgramDepartmentID`)
-3. Calls `fetchProformaForEligibleStudent()` which filters proformas based on eligibility matrix
-
-#### 2. Check Eligibility Before Application
-**Endpoint**: `POST /api/student/application/rc/:rid/opening/:pid`
-
-**File**: `ras-backend/application/student.application.go` (lines 60-83)
-
-**Process**:
-1. Gets proforma eligibility string
-2. Calls `rc.GetStudentEligible()` to verify student eligibility
-3. Checks:
-   - Student verification status
-   - CPI cutoff
-   - Program-department eligibility
-
----
-
-## Database Storage
-
-### Table: `proforma`
-
-**File**: `ras-backend/application/model.go` (line 18)
-
-```sql
-CREATE TABLE proforma (
-    id BIGINT PRIMARY KEY,
-    eligibility VARCHAR(130) NOT NULL,
-    cpi_cutoff DECIMAL(10,2),
-    -- ... other fields
-);
-```
-
-### Field Details
-
-- **`eligibility`**: VARCHAR(130)
-  - Stores binary string representation
-  - Default: `"0000...0"` (130 zeros)
-  - Index 0 always set to `'0'` before save (via `BeforeUpdate` hook)
-
-### Database Hooks
-
-**File**: `ras-backend/application/model.hooks.go`
-
-#### BeforeCreate Hook (lines 57-60)
 ```go
 func (p *Proforma) BeforeCreate(tx *gorm.DB) (err error) {
-    p.Eligibility = strings.Repeat("0", 130)
+    p.Eligibility = strings.Repeat("0", 130)  // ❌ WRONG: Should be 223!
     return
 }
 ```
-- Sets default eligibility to all zeros (no eligibility)
 
-#### BeforeUpdate Hook (lines 49-54)
+**Impact**: New proformas are initialized with only 130 characters, but the system expects 223. This causes:
+- Eligibility checks to fail for students with keyword IDs > 130
+- Potential index out of bounds errors
+- Inconsistent behavior
+
+**Fix Required**: Change to `strings.Repeat("0", 223)` or use a constant.
+
+---
+
+## End-to-End Flow in PhD Portal
+
+### A. Company Creates/Updates Eligibility
+
+#### Step 1: Frontend UI Selection
+**File**: `PhD-PAS-frontend/pages/company/rc/[rcid]/proforma/[proformaid]/step2.tsx`
+
+**Current Behavior:**
+- Displays a table with **20 departments** as rows
+- Under each department, shows **all research keywords** for that department
+- Each keyword has a checkbox
+- Company can:
+  - Select individual keywords
+  - Select all keywords in a department (via department button)
+  - Select all keywords (via "Select all" button)
+
+**State Management:**
+```typescript
+const [str, setStr] = useState(new Array(totalDeptKeywords + 1).join("0")); // 223 zeros
+```
+
+**Key Functions:**
+- `handleCheck(branch, keyword)`: Toggles individual keyword eligibility
+- `handleBranchWise(branchName)`: Selects all keywords for a department
+- `handleCheckAll()`: Sets all positions to `'1'`
+- `handleReset()`: Sets all positions to `'0'`
+
+**On Submit:**
+```typescript
+const info = {
+  eligibility: str,  // 223-character string
+  ID: parseInt(pid, 10),
+} as ProformaType;
+await proformaRequest.put(token, rid, info);
+```
+
+#### Step 2: API Request
+**File**: `PhD-PAS-frontend/callbacks/company/proforma.ts`
+
+- **Endpoint**: `PUT /api/company/application/rc/:rid/proforma`
+- **Payload**: `{ ID: number, eligibility: string }`
+
+#### Step 3: Backend Processing
+**File**: `Phd-PAS-backend/application/company.proforma.go`
+
+```go
+func putProformaByCompanyHandler(ctx *gin.Context) {
+    // ... validation ...
+    var jp Proforma
+    ctx.ShouldBindJSON(&jp)
+    jp.CompanyRecruitmentCycleID = cid
+    ok, err := updateProformaForCompany(ctx, &jp)
+    // ...
+}
+```
+
+#### Step 4: Database Update
+**File**: `Phd-PAS-backend/application/db.proforma.go`
+
+```go
+func updateProformaForCompany(ctx *gin.Context, jp *Proforma) (bool, error) {
+    tx := db.WithContext(ctx).
+        Where("id = ? AND company_recruitment_cycle_id = ?", jp.ID, jp.CompanyRecruitmentCycleID).
+        Updates(jp)
+    return tx.RowsAffected == 1, tx.Error
+}
+```
+
+**BeforeUpdate Hook** (ensures index 0 is always '0'):
 ```go
 func (p *Proforma) BeforeUpdate(tx *gorm.DB) (err error) {
     if p.Eligibility != "" {
@@ -279,177 +158,301 @@ func (p *Proforma) BeforeUpdate(tx *gorm.DB) (err error) {
     return
 }
 ```
-- Ensures index 0 is always `'0'` (reserved position)
+
+#### Step 5: Database Storage
+**Table**: `proforma`
+- **Field**: `eligibility VARCHAR(223)` (or larger)
+- **Stored Value**: Binary string like `"0101010101..."` (223 characters)
 
 ---
 
-## Student Eligibility Verification
+### B. Student Views Eligible Openings
 
-### Student Program-Department IDs
+#### Step 1: Student Request
+**Endpoint**: `GET /api/student/application/rc/:rid/opening`
 
-**File**: `ras-backend/student/model.go` (lines 24-25)
-
-Each student has:
-- **`ProgramDepartmentID`**: Primary program-department (e.g., 5 for BT-CSE)
-- **`SecondaryProgramDepartmentID`**: Secondary program-department (for dual/double major students)
-
-### Verification Function
-
-**File**: `ras-backend/rc/db.student.go` (lines 148-177)
+**File**: `Phd-PAS-backend/application/student.proforma.go`
 
 ```go
-func GetStudentEligible(ctx *gin.Context, sid uint, eligibility string, cpiEligibility float64) (bool, error) {
-    // Get student record
-    var student StudentRecruitmentCycle
-    tx := db.WithContext(ctx).Model(&StudentRecruitmentCycle{}).Where("id = ?", sid).First(&student)
-    
-    primaryID = int(student.ProgramDepartmentID)
-    secondaryID = int(student.SecondaryProgramDepartmentID)
-    
-    // Check verification status
-    if !student.IsVerified {
-        return false, errors.New("student not verified")
-    }
-    
-    // Check CPI cutoff
-    if student.CPI < cpiEligibility {
-        return false, errors.New("cpi cutoff doesnot match")
-    }
-    
-    // Check eligibility matrix
-    // Student is eligible if EITHER primary OR secondary program-department is eligible
-    if eligibility[primaryID] != '1' && eligibility[secondaryID] != '1' {
-        return false, errors.New("student branch not eligible")
-    }
-    
-    return true, nil
+func getProformasForEligibleStudentHandler(ctx *gin.Context) {
+    rid := parseUint(ctx.Param("rid"))
+    sid := getStudentRCID(ctx)
+    var student rc.StudentRecruitmentCycle
+    rc.FetchStudent(ctx, sid, &student)
+    var jps []Proforma
+    fetchProformaForEligibleStudent(ctx, rid, &student, &jps)
+    ctx.JSON(http.StatusOK, jps)
 }
 ```
 
-**Key Logic**:
-- Student is eligible if **EITHER** primary **OR** secondary program-department has `'1'` in eligibility matrix
-- Uses direct string indexing: `eligibility[primaryID]` and `eligibility[secondaryID]`
+#### Step 2: Eligibility Filtering
+**File**: `Phd-PAS-backend/application/db.proforma.go` (lines 162-192)
 
-### Database Query for Eligible Proformas
-
-**File**: `ras-backend/application/db.proforma.go` (lines 200-239)
-
+**Key Logic:**
 ```go
 func fetchProformaForEligibleStudent(ctx *gin.Context, rid uint, student *rc.StudentRecruitmentCycle, jps *[]Proforma) error {
-    // Base query: approved proformas with deadline not passed, CPI cutoff met, not already applied
+    // Build wildcard pattern for primary keyword ID
+    eligibility := bytes.Repeat([]byte("_"), 223)
+    eligibility[student.ProgramDepartmentID] = byte('1')
+    
+    // Build wildcard pattern for secondary keyword ID
+    secondary_eligibility := bytes.Repeat([]byte("_"), 223)
+    secondary_eligibility[student.SecondaryProgramDepartmentID] = byte('1')
+    
+    // Get student's PhD stage
+    stageFetch, _ := extractStudentStageofPhD(ctx)
+    
+    // Query proformas
     tx := db.WithContext(ctx).
-        Where("recruitment_cycle_id = ? AND is_approved = ? AND deadline > ? AND cpi_cutoff <= ? AND id NOT IN (?)",
-            rid, true, time.Now().UnixMilli(), student.CPI, subQuery)
-    
-    // Build eligibility condition
-    // SQL SUBSTRING is 1-indexed, so add 1 to ProgramDepartmentID
-    eligibilityClauses = append(eligibilityClauses, "SUBSTRING(eligibility FROM ? FOR 1) = '1'")
-    eligibilityArgs = append(eligibilityArgs, student.ProgramDepartmentID+1)
-    
-    eligibilityClauses = append(eligibilityClauses, "SUBSTRING(eligibility FROM ? FOR 1) = '1'")
-    eligibilityArgs = append(eligibilityArgs, student.SecondaryProgramDepartmentID+1)
-    
-    // OR condition: eligible if EITHER primary OR secondary matches
-    eligibilityCondition := strings.Join(eligibilityClauses, " OR ")
-    tx = tx.Where(fmt.Sprintf("(%s)", eligibilityCondition), eligibilityArgs...)
-    
-    return tx.Find(jps).Error
+        Where(
+            "recruitment_cycle_id = ? AND is_approved = ? AND deadline > ? AND " +
+            "(eligibility LIKE ? OR eligibility LIKE ?) AND " +
+            "cpi_cutoff <= ? AND id NOT IN (?) AND " +
+            "additional_eligibility LIKE ?",
+            rid, true, time.Now().UnixMilli(),
+            string(eligibility)+"%",      // Pattern: "____1____%"
+            string(secondary_eligibility)+"%",
+            student.CPI, subQuery, "%"+stageFetch+"%"
+        ).
+        Find(jps)
+    return tx.Error
 }
 ```
 
-**SQL Generated**:
-```sql
-SELECT * FROM proforma
-WHERE recruitment_cycle_id = ?
-  AND is_approved = true
-  AND deadline > ?
-  AND cpi_cutoff <= ?
-  AND id NOT IN (...)
-  AND (
-    SUBSTRING(eligibility FROM ? FOR 1) = '1'  -- Primary program-department
-    OR
-    SUBSTRING(eligibility FROM ? FOR 1) = '1'  -- Secondary program-department
-  )
+**How It Works:**
+1. Creates a 223-char string filled with `'_'` (wildcard)
+2. Sets position `ProgramDepartmentID` to `'1'`
+3. Uses SQL `LIKE` to match proformas where that position is `'1'`
+4. Also checks secondary keyword ID (for dual/double major students)
+5. Filters by CPI cutoff, deadline, not already applied, and PhD stage
+
+**Example:**
+- Student has `ProgramDepartmentID = 100` (CSE-Machine-learning)
+- Pattern created: `"________________...1________________...%"`
+- SQL: `eligibility LIKE '________________...1________________...%'`
+- Matches proformas where position 100 is `'1'`
+
+#### Step 3: Additional Eligibility Check
+**File**: `Phd-PAS-backend/application/util.student_rcid.go`
+
+```go
+func extractStudentStageofPhD(ctx *gin.Context) (string, error) {
+    user_email := middleware.GetUserID(ctx)
+    var stud student.Student
+    student.GetStudentByEmail(ctx, &stud, user_email)
+    return stud.Specialization, nil  // Returns PhD stage
+}
 ```
 
-**Note**: SQL `SUBSTRING` is 1-indexed, so `ProgramDepartmentID+1` is used (e.g., ID 5 → position 6 in SQL, but index 5 in Go string).
+**PhD Stages** (from `matrixUtils.ts`):
+- "Open seminar given.Thesis yet to submit"
+- "Thesis submitted. Yet to defend"
+- "Thesis defended. Degree will be awarded in next convocation"
+- "PhD degree awarded in current year"
+
+Companies select eligible stages in **Step 4** (`additional_eligibility` field).
 
 ---
 
-## Complete Flow Diagram
+### C. Student Opens Individual Proforma
 
+**Endpoint**: `GET /api/student/application/rc/:rid/opening/:pid`
+
+**File**: `Phd-PAS-backend/application/student.proforma.go`
+
+```go
+func getProformaForStudentHandler(ctx *gin.Context) {
+    pid := parseUint(ctx.Param("pid"))
+    var jp Proforma
+    fetchProformaForStudent(ctx, pid, &jp)
+    ctx.JSON(http.StatusOK, jp)
+}
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    COMPANY CREATES PROFORMA                      │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Step 3: Eligibility Matrix Selection (Frontend)                │
-│  - Company views matrix table (27 departments × 14 programs)    │
-│  - Selects eligible combinations via checkboxes                 │
-│  - Can use quick-select buttons (JEE, GATE, etc.)               │
-│  - State: eligibility string (130 chars)                        │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              │ PUT /api/company/application/rc/:rid/proforma
-                              │ { eligibility: "010101..." }
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Backend: putProformaByCompanyHandler()                         │
-│  - Validates company authorization                              │
-│  - Calls updateProformaForCompany()                            │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  BeforeUpdate Hook: Sets index 0 to '0'                        │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Database: UPDATE proforma SET eligibility = '010101...'        │
-│  WHERE id = ? AND company_recruitment_cycle_id = ?              │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              │ (Later: Student views openings)
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Student: GET /api/student/application/rc/:rid/opening          │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Backend: getProformasForEligibleStudentHandler()               │
-│  - Gets student's ProgramDepartmentID (e.g., 5 for BT-CSE)     │
-│  - Gets student's SecondaryProgramDepartmentID (if any)         │
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  fetchProformaForEligibleStudent()                              │
-│  - Queries proforma table                                       │
-│  - Filters: is_approved=true, deadline>now, CPI>=cutoff         │
-│  - Eligibility check:                                          │
-│    SUBSTRING(eligibility FROM ProgramDepartmentID+1 FOR 1)='1' │
-│    OR                                                           │
-│    SUBSTRING(eligibility FROM SecondaryProgramDepartmentID+1)='1'│
-└────────────────────────────┬────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Returns: List of eligible proformas                            │
-│  Student sees only openings they can apply to                   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              │ (Student applies)
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  POST /api/student/application/rc/:rid/opening/:pid           │
-│  - Calls GetStudentEligible() to double-check                    │
-│  - Verifies: verification status, CPI, eligibility matrix        │
-└─────────────────────────────────────────────────────────────────┘
+
+**Eligibility Display:**
+- Frontend displays eligibility matrix using `MatrixExpanded` component
+- Shows checkmarks (✓) for eligible keywords, crosses (✗) for non-eligible
+
+---
+
+## Department-Only Eligibility Proposal
+
+### Goal
+**Change the system so that companies select only departments** (not individual keywords). When a department is selected, **all students in that department become eligible**, regardless of their specific research keyword.
+
+### Design Approach
+
+**Keep the existing 223-character eligibility string**, but change the **company UI** to:
+- Show only **department checkboxes** (no keyword-level selection)
+- When a department is checked, **automatically set all keyword positions for that department to `'1'`**
+- When a department is unchecked, **set all keyword positions for that department to `'0'`**
+
+**Why This Works:**
+- Backend filtering logic remains unchanged (still checks keyword ID positions)
+- Student eligibility still determined by their `ProgramDepartmentID` (keyword ID)
+- If department is selected → all keywords in dept are `'1'` → any student in that dept matches
+- No database schema changes required
+- Minimal code changes
+
+---
+
+## Required Code Changes
+
+### 1. Frontend: Simplify Step2 UI to Department-Only
+
+**File**: `PhD-PAS-frontend/pages/company/rc/[rcid]/proforma/[proformaid]/step2.tsx`
+
+#### Current Implementation (Keyword-Level Selection)
+```typescript
+// Shows departments with nested keyword checkboxes
+{Branches.map((branch) => (
+  <TableRow>
+    <TableCell>{branch}</TableCell>
+    <TableCell>
+      {Object.keys(func[branch]).map((keyword) => (
+        <Checkbox
+          checked={str[parseInt(func[branch][keyword], 10)] === "1"}
+          onClick={() => handleCheck(branch, keyword)}
+        />
+      ))}
+    </TableCell>
+  </TableRow>
+))}
 ```
+
+#### Proposed Implementation (Department-Only Selection)
+```typescript
+// Show only department checkboxes
+{Branches.map((branch) => {
+  const keywordIndices = Object.values(func[branch as keyof typeof func])
+    .map(idx => parseInt(idx, 10));
+  const isDeptSelected = keywordIndices.every(idx => str[idx] === "1");
+  
+  return (
+    <TableRow key={branch}>
+      <TableCell>
+        <Checkbox
+          checked={isDeptSelected}
+          onChange={() => handleDepartmentToggle(branch)}
+        />
+      </TableCell>
+      <TableCell sx={{ fontWeight: 600 }}>{branch}</TableCell>
+    </TableRow>
+  );
+})}
+```
+
+#### New Handler Function
+```typescript
+const handleDepartmentToggle = (branchName: string) => {
+  const keywordIndices = Object.values(func[branchName as keyof typeof func])
+    .map(idx => parseInt(idx, 10));
+  
+  // Check if department is currently fully selected
+  const isCurrentlySelected = keywordIndices.every(idx => str[idx] === "1");
+  
+  let newStr = str;
+  keywordIndices.forEach(idx => {
+    newStr = `${newStr.substring(0, idx)}${isCurrentlySelected ? "0" : "1"}${newStr.substring(idx + 1)}`;
+  });
+  
+  setStr(newStr);
+};
+```
+
+#### Remove/Modify Functions
+- **Keep**: `handleBranchWise()` (can be repurposed or removed)
+- **Remove**: `handleCheck()` (individual keyword selection)
+- **Keep**: `handleCheckAll()` and `handleReset()` (still useful)
+
+---
+
+### 2. Backend: Fix Default Eligibility Length Bug
+
+**File**: `Phd-PAS-backend/application/model.hooks.go`
+
+#### Current Code (BUG)
+```go
+func (p *Proforma) BeforeCreate(tx *gorm.DB) (err error) {
+    p.Eligibility = strings.Repeat("0", 130)  // ❌ WRONG
+    return
+}
+```
+
+#### Fixed Code
+```go
+const EligibilityStringLength = 223  // Add constant at package level
+
+func (p *Proforma) BeforeCreate(tx *gorm.DB) (err error) {
+    p.Eligibility = strings.Repeat("0", EligibilityStringLength)  // ✅ FIXED
+    return
+}
+```
+
+**Alternative**: Use `totalDeptKeywords + 1` if importing from a shared constant file.
+
+---
+
+### 3. Optional: Update Eligibility Display Component
+
+**File**: `PhD-PAS-frontend/components/Utils/MatrixExpanded.tsx`
+
+**Current**: Shows department rows with nested keyword rows (each with ✓/✗)
+
+**Proposed**: Show only department rows with ✓/✗ based on whether **all** keywords in that department are selected.
+
+```typescript
+function MatrixExpanded({ data }: { data: string }) {
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableBody>
+          {Branches.map((branch) => {
+            const keywordIndices = Object.values(func[branch as keyof typeof func])
+              .map(idx => parseInt(idx, 10));
+            const isDeptSelected = keywordIndices.every(idx => data[idx] === "1");
+            
+            return (
+              <TableRow key={branch}>
+                <TableCell component="th" scope="row" sx={{ fontWeight: 600 }}>
+                  {branch}
+                </TableCell>
+                <TableCell>
+                  {isDeptSelected ? (
+                    <CheckIcon sx={{ color: "green" }} />
+                  ) : (
+                    <CloseIcon sx={{ color: "red" }} />
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+}
+```
+
+---
+
+## Who Sees What After Changes
+
+### Companies
+- **Step 2 UI**: See only **department checkboxes** (20 departments)
+- **Selection**: Check/uncheck entire departments
+- **Storage**: When department is checked, all keyword positions for that department are set to `'1'` in the eligibility string
+- **View Proforma**: See simplified eligibility matrix (department-level only, if display component is updated)
+
+### Students
+- **Eligibility Check**: Still based on their `ProgramDepartmentID` (keyword ID)
+- **If their department is selected**: Their keyword position will be `'1'` → **ELIGIBLE** ✓
+- **View Openings**: See proformas where their department was selected
+- **Apply**: Can apply if other constraints are met (CPI, deadline, PhD stage, not already applied)
+
+### Admins
+- **View Proforma**: See eligibility matrix (department-level if display updated)
+- **Edit Proforma**: Can still edit eligibility string directly (if needed)
 
 ---
 
@@ -457,140 +460,135 @@ WHERE recruitment_cycle_id = ?
 
 ### Frontend Files
 
-1. **Matrix Selection UI**
-   - `ras-frontend/pages/company/rc/[rcid]/proforma/[proformaid]/step3.tsx`
-   - Main UI for company to select eligibility
+1. **Eligibility Selection UI**
+   - `PhD-PAS-frontend/pages/company/rc/[rcid]/proforma/[proformaid]/step2.tsx`
+   - Main UI for company to select eligibility (needs modification)
 
-2. **Matrix Display Component**
-   - `ras-frontend/components/Utils/MatrixExpanded.tsx`
-   - Displays eligibility matrix as table
+2. **Eligibility Display Component**
+   - `PhD-PAS-frontend/components/Utils/MatrixExpanded.tsx`
+   - Displays eligibility matrix (optional update)
 
 3. **Mapping Configuration**
-   - `ras-frontend/components/Utils/matrixUtils.ts`
-   - Contains `func` object mapping branch-program to string indices
-   - Contains `rev` object for reverse lookup (index → program-department)
+   - `PhD-PAS-frontend/components/Utils/matrixUtils.ts`
+   - Contains `func` object (department → keyword → index)
+   - Contains `rev` object (index → "DEPT-KEYWORD")
+   - Contains `Branches` array (20 departments)
+   - Contains `totalDeptKeywords = 222`
 
-4. **API Callbacks**
-   - `ras-frontend/callbacks/company/proforma.ts`
+4. **Parser Utilities**
+   - `PhD-PAS-frontend/components/Parser/parser.ts`
+   - `getDepartment(id)`: Extracts department from keyword ID
+   - `getProgram(id)`: Extracts keyword from keyword ID
+   - `getDeptProgram(id)`: Returns full "DEPT-KEYWORD" string
+
+5. **API Callbacks**
+   - `PhD-PAS-frontend/callbacks/company/proforma.ts`
    - PUT request to update eligibility
 
 ### Backend Files
 
 1. **Model Definition**
-   - `ras-backend/application/model.go`
-   - Proforma struct with `Eligibility` field
+   - `Phd-PAS-backend/application/model.go`
+   - `Proforma` struct with `Eligibility string` field
 
 2. **Database Hooks**
-   - `ras-backend/application/model.hooks.go`
-   - BeforeCreate: Sets default eligibility
-   - BeforeUpdate: Ensures index 0 is '0'
+   - `Phd-PAS-backend/application/model.hooks.go`
+   - `BeforeCreate`: Sets default eligibility (**BUG: 130 should be 223**)
+   - `BeforeUpdate`: Ensures index 0 is always `'0'`
 
 3. **Company Handlers**
-   - `ras-backend/application/company.proforma.go`
-   - PUT handler for updating proforma eligibility
+   - `Phd-PAS-backend/application/company.proforma.go`
+   - `putProformaByCompanyHandler()`: Handles PUT request
 
 4. **Database Functions**
-   - `ras-backend/application/db.proforma.go`
+   - `Phd-PAS-backend/application/db.proforma.go`
    - `updateProformaForCompany()`: Updates eligibility in DB
-   - `fetchProformaForEligibleStudent()`: Queries eligible proformas
+   - `fetchProformaForEligibleStudent()`: Queries eligible proformas using `LIKE` patterns
 
 5. **Student Eligibility Check**
-   - `ras-backend/rc/db.student.go`
-   - `GetStudentEligible()`: Verifies student eligibility
+   - `Phd-PAS-backend/rc/db.student.go`
+   - `GetStudentEligible()`: Verifies student eligibility (checks keyword ID position)
 
 6. **Student Handlers**
-   - `ras-backend/application/student.proforma.go`
+   - `Phd-PAS-backend/application/student.proforma.go`
    - `getProformasForEligibleStudentHandler()`: Returns eligible openings
 
-7. **Router Configuration**
-   - `ras-backend/application/router.go`
-   - Defines API endpoints
+7. **Utility Functions**
+   - `Phd-PAS-backend/application/util.student_rcid.go`
+   - `extractStudentStageofPhD()`: Gets student's PhD stage
 
-### Utility Files
+8. **Student Model**
+   - `Phd-PAS-backend/student/model.go`
+   - `Student` struct with `ProgramDepartmentID` and `Specialization` fields
 
-1. **Program-Department Utilities**
-   - `ras-backend/util/prog_dept.go`
-   - Helper functions for double major detection
-
----
-
-## Key Insights
-
-### 1. String Indexing
-- **Go strings**: 0-indexed (position 5 = `eligibility[5]`)
-- **SQL SUBSTRING**: 1-indexed (position 5 = `SUBSTRING(eligibility FROM 6 FOR 1)`)
-- **Conversion**: SQL uses `ProgramDepartmentID + 1`
-
-### 2. Eligibility Logic
-- Student is eligible if **EITHER** primary **OR** secondary program-department is eligible
-- This allows dual/double major students to apply if either program qualifies
-
-### 3. Default Behavior
-- New proformas start with **no eligibility** (all zeros)
-- Company must explicitly select eligible combinations
-- Index 0 is always `'0'` (reserved/unused)
-
-### 4. Matrix Size
-- Current: 130 characters (supports up to 139 program-department combinations)
-- Some positions may be unused (e.g., invalid combinations)
-
-### 5. Performance Considerations
-- String indexing is O(1) - very fast
-- SQL SUBSTRING queries are efficient with proper indexing
-- Eligibility check happens at query time (no separate verification step needed)
+9. **RC Model**
+   - `Phd-PAS-backend/rc/model.go`
+   - `StudentRecruitmentCycle` struct with `ProgramDepartmentID` and `SecondaryProgramDepartmentID`
 
 ---
 
-## Example: BT-CSE Eligibility
+## Summary
+
+### Current System (PhD Portal)
+- **Eligibility String**: 223 characters (positions 0-222)
+- **Position Meaning**: Department-Keyword combinations
+- **Company Selection**: Department × Keyword matrix (individual keyword checkboxes)
+- **Student Matching**: Based on keyword ID (`ProgramDepartmentID`)
+- **Query Method**: SQL `LIKE` with wildcard patterns
+- **Bug**: Default initialization is 130 zeros (should be 223)
+
+### Proposed System (Department-Only)
+- **Eligibility String**: Same 223 characters (no schema change)
+- **Position Meaning**: Same (Department-Keyword combinations)
+- **Company Selection**: **Department-only checkboxes** (no keyword-level selection)
+- **Student Matching**: Same (based on keyword ID)
+- **Query Method**: Same (SQL `LIKE` patterns)
+- **Fix**: Default initialization corrected to 223 zeros
+
+### Key Benefits
+1. **Simpler UI**: Companies only select departments, not individual keywords
+2. **Automatic Coverage**: Selecting a department makes all students in that department eligible
+3. **Backward Compatible**: Backend logic unchanged, only UI changes
+4. **Bug Fix**: Corrects the 130 vs 223 initialization issue
+
+### Implementation Priority
+1. **High**: Fix backend default eligibility length (prevents bugs)
+2. **High**: Update Step2 UI to department-only selection
+3. **Medium**: Update MatrixExpanded display component (optional, improves UX)
+4. **Low**: Add migration script to fix existing proformas with 130-char eligibility (if any)
+
+---
+
+## Example: CSE Department Selection
 
 ### Scenario
-Company wants to allow **BT-CSE** students to apply.
+Company wants to allow **all CSE students** to apply, regardless of their research keyword.
 
-### Step-by-Step
+### Current Flow (Keyword-Level)
+1. Company opens Step 2
+2. Sees CSE department with 12 keywords listed:
+   - Theoretical-computer-science (position 99)
+   - Machine-learning (position 100)
+   - Computer-systems (position 101)
+   - ... (9 more keywords)
+3. Company checks all 12 keyword checkboxes individually
+4. Eligibility string: Positions 99-110 set to `'1'`
 
-1. **Company selects checkbox**:
-   - Branch: "Computer Science and Engineering (CSE)"
-   - Program: "BT" (Bachelor of Technology)
+### Proposed Flow (Department-Level)
+1. Company opens Step 2
+2. Sees CSE department with **single checkbox**
+3. Company checks the CSE checkbox
+4. **Automatically**: All 12 keyword positions (99-110) set to `'1'`
+5. Eligibility string: Same result, but achieved with one click
 
-2. **Frontend calculates index**:
-   ```typescript
-   // From matrixUtils.ts
-   func["Computer Science and Engineering (CSE)"]["BT"] = 5
-   ```
-
-3. **Frontend updates string**:
-   ```typescript
-   str = "000000..."  // Before
-   str[5] = "1"       // Set position 5 to '1'
-   str = "0000010..." // After
-   ```
-
-4. **Frontend sends to backend**:
-   ```json
-   PUT /api/company/application/rc/1/proforma
-   {
-     "ID": 123,
-     "eligibility": "0000010000..."
-   }
-   ```
-
-5. **Backend processes**:
-   - BeforeUpdate hook: Sets index 0 to '0' (if needed)
-   - Updates database: `UPDATE proforma SET eligibility = '0000010000...' WHERE id = 123`
-
-6. **Student views openings**:
-   - Student has `ProgramDepartmentID = 5` (BT-CSE)
-   - Query checks: `SUBSTRING(eligibility FROM 6 FOR 1) = '1'`
-   - Position 5 (index 5) = '1' → **ELIGIBLE** ✓
-
-7. **Student applies**:
-   - `GetStudentEligible()` checks `eligibility[5] == '1'`
-   - Returns `true` → Application proceeds
+### Student Matching (Unchanged)
+- Student with `ProgramDepartmentID = 100` (CSE-Machine-learning)
+- Backend checks: `eligibility[100] == '1'` → **ELIGIBLE** ✓
+- Works the same way in both systems
 
 ---
 
 ## Conclusion
 
-The Eligibility Matrix system provides a flexible and efficient way for companies to specify which program-department combinations are eligible for their job openings. The binary string representation allows for fast lookups and efficient database queries, while the frontend UI makes it easy for companies to configure eligibility through an intuitive matrix interface.
+The PhD portal eligibility system uses a **223-character string** where positions represent **Department-Keyword combinations**, queried using SQL `LIKE` patterns. The proposed department-only selection simplifies the company UI while maintaining backend compatibility. The critical bug fix (130 → 223 default length) should be implemented immediately to prevent eligibility check failures.
 
-The system handles edge cases such as dual/double major students by checking both primary and secondary program-department IDs, ensuring fair access to opportunities while maintaining performance through optimized string indexing and SQL queries.
